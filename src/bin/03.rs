@@ -1,10 +1,10 @@
-use std::cmp::max;
+use adv_code_2025::*;
 use anyhow::*;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use code_timing_macros::time_snippet;
 use const_format::concatcp;
-use adv_code_2025::*;
+use std::cmp::max;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 const DAY: &str = "03";
 const INPUT_FILE: &str = concatcp!("input/", DAY, ".txt");
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
     println!("=== Part 1 ===");
 
     fn part1<R: BufRead>(reader: R) -> Result<usize> {
-            solve(reader, 2)
+        solve(reader, 2)
     }
 
     assert_eq!(357, part1(BufReader::new(TEST.as_bytes()))?);
@@ -52,14 +52,16 @@ fn main() -> Result<()> {
 
 fn parse_input<R: BufRead>(reader: R) -> Result<Vec<Vec<i32>>> {
     let mut ret = Vec::new();
-    let lines = reader
-        .lines()
-        .collect::<Result<Vec<String>, _>>()?;
+    let lines = reader.lines().collect::<Result<Vec<String>, _>>()?;
 
     for line in lines {
         let bank = line
             .chars()
-            .map(|c| c.to_digit(10).map(|d| d as i32).ok_or_else(|| anyhow!("Invalid digit")))
+            .map(|c| {
+                c.to_digit(10)
+                    .map(|d| d as i32)
+                    .ok_or_else(|| anyhow!("Invalid digit"))
+            })
             .collect::<Result<Vec<i32>, _>>()?;
         ret.push(bank);
     }
@@ -67,44 +69,44 @@ fn parse_input<R: BufRead>(reader: R) -> Result<Vec<Vec<i32>>> {
     Ok(ret)
 }
 
-fn find_max_joltage_path(banks: &Vec<i32>, selection_size: usize) -> Result<usize> {
-    let len = banks.len();
-
-    if len < selection_size {
-        return Err(anyhow!("Not enough banks to determine max joltage path"));
+fn select_max(numbers: &[i32], idx_from: usize, remaining: usize) -> Result<Vec<i32>> {
+    if remaining == 0 {
+        return Ok(Vec::new());
     }
 
-    let mut selected: Vec<Option<i32>> = vec![None; selection_size];
+    let idx_to = numbers.len() as i32 - remaining as i32;
+    if idx_to < 0 {
+        return Err(anyhow!(
+            "Cannot select {} out of {}",
+            remaining,
+            numbers.len()
+        ));
+    }
+    let idx_to = idx_to as usize;
+    let mut max_value: Option<i32> = None;
+    let mut max_idx = -1;
 
-    for (idx, &joltage) in banks.iter().enumerate() {
-        // NUM_SELECTED - i <= len - idx
-        let diff = selection_size as i32 - len as i32 + idx as i32;
-        let i = if diff > 0 {
-            diff as usize
-        } else {
-            0
-        };
-        for sel_idx in i..selection_size {
-            if selected[sel_idx].is_none() || joltage > selected[sel_idx].unwrap() {
-                selected[sel_idx] = Some(joltage);
-                for j in (sel_idx + 1)..selection_size {
-                    selected[j] = None;
-                }
-                break;
-            }
+    for i in idx_from..=idx_to {
+        if max_value.is_none() || numbers[i] > max_value.unwrap() {
+            max_value = Some(numbers[i]);
+            max_idx = i as i32;
         }
     }
 
-    if selected.iter().any(|x| x.is_none()) {
-        return Err(anyhow!("Not enough banks to determine max joltage path"));
+    if max_idx == -1 {
+        return Err(anyhow!(("No maximum found")));
     }
 
-    let selection = selected
+    let mut ret = vec![max_value.unwrap()];
+    ret.extend(select_max(numbers, (max_idx + 1) as usize, remaining - 1)?);
+
+    Ok(ret)
+}
+
+fn select_max_joltage(bank: &Vec<i32>, selection_size: usize) -> Result<usize> {
+    let selection = select_max(bank, 0, selection_size)?
         .iter()
-        .filter_map(|j_opt| match j_opt {
-            Some(j) => Some(j.to_string()),
-            None => None,
-        })
+        .map(|j| j.to_string())
         .collect::<String>();
 
     Ok(selection.parse::<usize>()?)
@@ -112,10 +114,11 @@ fn find_max_joltage_path(banks: &Vec<i32>, selection_size: usize) -> Result<usiz
 
 fn solve<R: BufRead>(reader: R, selection_size: usize) -> Result<usize> {
     let banks = parse_input(reader)?;
-    let answer = banks.iter()
-        .map(|bank| find_max_joltage_path(bank, selection_size))
+    let answer = banks
+        .iter()
+        .map(|bank| select_max_joltage(bank, selection_size))
         .collect::<Result<Vec<usize>>>()?
         .iter()
-        .sum::<usize>() ;
+        .sum::<usize>();
     Ok(answer)
 }
